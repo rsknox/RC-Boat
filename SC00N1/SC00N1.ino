@@ -72,7 +72,8 @@ RF24 radio(7,8);                              // CE & CS pins to use (Using 7,8 
 RF24Network network(radio); 
 
 uint16_t this_node;                           // Our node address
-
+const bool debug = false;
+//const bool debug = true;
 const unsigned long interval = 20; // ms       // Delay manager to send pings regularly.
 unsigned long last_time_sent;
 #define JOYSTICK_X   A0  // The Joystick potentiometers connected to Arduino Analog inputs
@@ -153,7 +154,7 @@ void loop(){
         default:  printf_P(PSTR("*** WARNING *** Unknown message type %c\n\r"),header.type);
                   network.read(header,0,0);
                   break;
-      };
+      }
     }
 
   
@@ -185,16 +186,24 @@ void loop(){
  //   }
     
     if (ok){                                              // Notify us of the result
+        if (debug){
         printf_P(PSTR("%lu: APP Send ok\n\r"),millis());
+        }
     }else{
+    if (debug){
         printf_P(PSTR("%lu: APP Send failed\n\r"),millis());
+    }
         last_time_sent -= 100;                            // Try sending at a different time next time
     }
   ok = send_J(to);
   if (ok){
+    if (debug){
     printf_P(PSTR("%lu: APP Send_J ok\n\r"),millis());
+    }
   }else{
+    if (debug){
     printf_P(PSTR("%lu: APP Send_J failed\n\r"),millis());
+    }
     last_time_sent -=100;
   }
   }
@@ -215,8 +224,10 @@ bool send_T(uint16_t to)
   
   // The 'T' message that we send is just a ulong, containing the time
   unsigned long message = millis();
+  if (debug){
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending %lu to 0%o...\n\r"),millis(),message,to);
+  }
   return network.write(header,&message,sizeof(unsigned long));
 }
 
@@ -226,9 +237,10 @@ bool send_T(uint16_t to)
 bool send_N(uint16_t to)
 {
   RF24NetworkHeader header(/*to node*/ to, /*type*/ 'N' /*Time*/);
-  
+  if (debug){
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+  }
   return network.write(header,active_nodes,sizeof(active_nodes));
 }
 
@@ -238,16 +250,20 @@ bool send_N(uint16_t to)
 bool send_J(uint16_t to)
 {
   RF24NetworkHeader header(/*to node*/ to, /*type*/ 'J' /*Time*/);
+  if (debug){
   Serial.println("entering send J");
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+  }
   int x = myData.Xposition;
   int y = myData.Yposition;
   bool sw = myData.switchOn;
+  if (debug){
   Serial.print("Raw joystick coords: x= ");
   Serial.print(x);
   Serial.print("  y= ");
   Serial.println(y);
+  }
  // caculation to restrict y to forward motion only an x to + or - 45 degrees 
  if (y < 558) {             //y = 558 is the null posion on our joy stick
   y = 558;              // if the y is less than 558 we restrict to 558 so we dont go backwards
@@ -274,13 +290,14 @@ bool send_J(uint16_t to)
 //  Serial.print(" angle: ");
 //  Serial.println(angle);
   msg_J msg = {x, y, sw};
+  if (debug){
   Serial.print("outgoing msg : x: ");
   Serial.print(x);
   Serial.print(" y ");
   Serial.print(y);
   Serial.print(" sw ");
   Serial.print(sw);
-  
+  }
   return network.write(header, &msg, sizeof (msg));
 }
 /**
@@ -291,7 +308,9 @@ void handle_T(RF24NetworkHeader& header){
 
   unsigned long message;                                                                      // The 'T' message is just a ulong, containing the time
   network.read(header,&message,sizeof(unsigned long));
+  if (debug){
   printf_P(PSTR("%lu: APP Received %lu from 0%o\n\r"),millis(),message,header.from_node);
+  }
 
 
   if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
@@ -306,7 +325,9 @@ void handle_N(RF24NetworkHeader& header)
   static uint16_t incoming_nodes[max_active_nodes];
 
   network.read(header,&incoming_nodes,sizeof(incoming_nodes));
+  if (debug){
   printf_P(PSTR("%lu: APP Received nodes from 0%o\n\r"),millis(),header.from_node);
+  }
 
   int i = 0;
   while ( i < max_active_nodes && incoming_nodes[i] > 00 )
@@ -326,7 +347,9 @@ void add_node(uint16_t node){
   
   if ( i == -1 && num_active_nodes < max_active_nodes ){         // If not, add it to the table
       active_nodes[num_active_nodes++] = node; 
+      if (debug){
       printf_P(PSTR("%lu: APP Added 0%o to list of active nodes.\n\r"),millis(),node);
+      }
   }
 }
 

@@ -79,7 +79,8 @@ int HorizontalServoPosition;    // variable to store the servo position
 
 int VerticalJoystickReceived;   // Variable to store received Joystick values
 int VerticalServoPosition;      // variable to store the servo positio
-
+const bool debug = false;
+//const bool debug = true;
 /**
   Create a data structure for transmitting and receiving data
   This allows many variables to be easily sent and received in a single transmission
@@ -114,7 +115,7 @@ float rightMotorScale = 0;
 
 float maxMotorScale = 0; //holds the mixed output scaling factor
 
-int deadZone = 120; //jostick dead zone
+int deadZone = 60; //jostick dead zone
 
 struct msg_A {          // seting up mesage to send cordinents to the flight leader
   int x;
@@ -144,6 +145,7 @@ void setup(){
   //Serial.begin(9600);
  // printf_begin();
   printf_P(PSTR("\n\rRF24Network/examples/meshping/\n\r"));
+  
   this_node = node_address_set[NODE_ADDRESS];            // Which node are we?
   
   SPI.begin();                                           // Bring up the RF network
@@ -163,7 +165,7 @@ void loop(){
         case 'T': handle_T(header); break;
         case 'N': handle_N(header); break;
         case 'A': handle_A(header); break;
-        default:  printf_P(PSTR("*** WARNING *** Unknown message type %c\n\r"),header.type);
+        default:  //printf_P(PSTR("*** WARNING *** Unknown message type %c\n\r"),header.type);
                   network.read(header,0,0);
                   break;
       };
@@ -191,9 +193,13 @@ void loop(){
     }
     
     if (ok){                                              // Notify us of the result
+        if (debug){
         printf_P(PSTR("%lu: APP Send ok\n\r"),millis());
+        }
     }else{
+    if (debug){
         printf_P(PSTR("%lu: APP Send failed\n\r"),millis());
+    }
         last_time_sent -= 100;                            // Try sending at a different time next time
     }
   }
@@ -211,8 +217,10 @@ bool send_T(uint16_t to)
   
   // The 'T' message that we send is just a ulong, containing the time
   unsigned long message = millis();
+  if (debug){
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending %lu to 0%o...\n\r"),millis(),message,to);
+  }
   return network.write(header,&message,sizeof(unsigned long));
 }
 /**
@@ -223,9 +231,10 @@ bool send_T(uint16_t to)
 bool send_A(uint16_t to)
 {
   RF24NetworkHeader header(/*to node*/ to, /*type*/ 'A' /*Time*/);
-  
+  if (debug){
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+  }
   int x = 412;
   int y = 409;
   bool sw = false;
@@ -246,9 +255,10 @@ bool send_A(uint16_t to)
 bool send_N(uint16_t to)
 {
   RF24NetworkHeader header(/*to node*/ to, /*type*/ 'N' /*Time*/);
-  
+  if (debug){
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+  }
   return network.write(header,active_nodes,sizeof(active_nodes));
 }
 /**
@@ -258,7 +268,9 @@ bool send_N(uint16_t to)
 void handle_T(RF24NetworkHeader& header){
   unsigned long message;                                                                      // The 'T' message is just a ulong, containing the time
   network.read(header,&message,sizeof(unsigned long));
+  if (debug){
   printf_P(PSTR("%lu: APP Received %lu from 0%o\n\r"),millis(),message,header.from_node);
+  }
   if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
     add_node(header.from_node);
 }
@@ -269,7 +281,9 @@ void handle_N(RF24NetworkHeader& header)
 {
   static uint16_t incoming_nodes[max_active_nodes];
   network.read(header,&incoming_nodes,sizeof(incoming_nodes));
+  if (debug){
   printf_P(PSTR("%lu: APP Received nodes from 0%o\n\r"),millis(),header.from_node);
+  }
   int i = 0;
   while ( i < max_active_nodes && incoming_nodes[i] > 00 )
     add_node(incoming_nodes[i++]);
@@ -284,16 +298,20 @@ void handle_A(RF24NetworkHeader& header){
   unsigned long message;              // The 'T' message is just a ulong, containing the time
   msg_A msg;
   network.read(header,&msg,sizeof(msg));
+  if (debug){
   printf_P(PSTR("%lu: APP A Message Received %lu from 0%o\n\r"),millis(),msg,header.from_node);
+  }
   // Serial.print("...header.from_node: ");
 
 myData.Xposition = msg.x;
 myData.Yposition = msg.y;
 myData.switchOn = msg.sw;
+if (debug){
    Serial.print("X joystick from SC: ");
    Serial.print(myData.Xposition);
    Serial.print("   Y joystick from SC: ");
    Serial.println(myData.Yposition);
+}
     //aquire the analog input for Y  and rescale the 0..1023 range to -255..255 range
   analogTmp = myData.Yposition;
   throttle = (512 - analogTmp) / 2;
@@ -308,18 +326,23 @@ myData.switchOn = msg.sw;
   rightMotor = throttle - direction;
 
   //print the initial mix results
-  // Serial.print("LIN:"); // Serial.print( leftMotor, DEC);
-  // Serial.print(", RIN:"); // Serial.print( rightMotor, DEC);
-
+  if (debug){
+  Serial.print("LIN:"); 
+  Serial.print( leftMotor, DEC);
+  Serial.print(", RIN:"); 
+  Serial.println( rightMotor, DEC);
+  }
   //calculate the scale of the results in comparision base 8 bit PWM resolution
   leftMotorScale =  leftMotor / 255.0;
   leftMotorScale = abs(leftMotorScale);
   rightMotorScale =  rightMotor / 255.0;
   rightMotorScale = abs(rightMotorScale);
-
-  // Serial.print("| LSCALE:"); // Serial.print( leftMotorScale, 2);
-  // Serial.print(", RSCALE:"); // Serial.print( rightMotorScale, 2);
-
+if (debug){
+   Serial.print("| LSCALE:"); 
+   Serial.print( leftMotorScale, 2);
+   Serial.print(", RSCALE:"); 
+   Serial.println( rightMotorScale, 2);
+}
   //choose the max scale value if it is above 1
   maxMotorScale = max(leftMotorScale, rightMotorScale);
   maxMotorScale = max(1, maxMotorScale);
@@ -327,36 +350,42 @@ myData.switchOn = msg.sw;
   //and apply it to the mixed values
   leftMotorScaled = constrain(leftMotor / maxMotorScale, -255, 255);
   rightMotorScaled = constrain(rightMotor / maxMotorScale, -255, 255);
-  // Serial.println();
-  // Serial.print("| LOUT:"); // Serial.print( leftMotorScaled);
-  // Serial.print(", ROUT:"); // Serial.print( rightMotorScaled);
-
-  // Serial.print(" |");
-
+  if (debug){
+  Serial.println();
+  Serial.print("| LOUT:"); 
+  Serial.print( leftMotorScaled);
+  Serial.print(", ROUT:"); 
+  Serial.print( rightMotorScaled);
+  Serial.print(" |");
+  }
   //apply the results to appropriate uC PWM outputs for the LEFT motor:
   if (abs(leftMotorScaled) > deadZone)
   {
 
     if (leftMotorScaled > 0)
     {
-      // Serial.print("F");
-      // Serial.print(abs(leftMotorScaled), DEC);
-
+      if (debug){
+      Serial.print(" F ");
+      Serial.print(abs(leftMotorScaled), DEC);
+      }
       analogWrite(controllerRA, 0);
       analogWrite(controllerFA, abs(leftMotorScaled));
     }
     else
     {
-      // Serial.print("R");
-      // Serial.print(abs(leftMotorScaled), DEC);
-
+    if (debug){
+      Serial.print(" R ");
+      Serial.print(abs(leftMotorScaled), DEC);
+    }
       analogWrite(controllerFA, 0);
       analogWrite(controllerRA, abs(leftMotorScaled));
     }
   }
   else
   {
-    // Serial.print("IDLE");
+    if (debug){
+    Serial.print(" IDLE ");
+    }
     analogWrite(controllerFA, 0);
     analogWrite(controllerRA, 0);
   }
@@ -367,33 +396,37 @@ myData.switchOn = msg.sw;
 
     if (rightMotorScaled > 0)
     {
-      // Serial.print("F");
-      // Serial.print(abs(rightMotorScaled), DEC);
-
+      if (debug){
+      Serial.print(" F ");
+      Serial.print(abs(rightMotorScaled), DEC);
+      }
       analogWrite(controllerRB, 0);
       analogWrite(controllerFB, abs(rightMotorScaled));
     }
     else
     {
-      // Serial.print("R");
-      // Serial.print(abs(rightMotorScaled), DEC);
-
+      if (debug){
+      Serial.print(" R ");
+      Serial.print(abs(rightMotorScaled), DEC);
+      }
       analogWrite(controllerFB, 0);
       analogWrite(controllerRB, abs(rightMotorScaled));
     }
   }
   else
   {
-    // Serial.print("IDLE");
+    if (debug){
+    Serial.print(" IDLE ");
+    }
     analogWrite(controllerFB, 0);
     analogWrite(controllerRB, 0);
   }
-
-  // Serial.println("");
-
+if (debug){
+  Serial.println("");
+}
   //To do: throttle change limiting, to avoid radical changes of direction for large DC motors
 
-  delay(50);
+  delay(20);
 
 
   
@@ -423,6 +456,8 @@ void add_node(uint16_t node){
   
   if ( i == -1 && num_active_nodes < max_active_nodes ){         // If not, add it to the table
       active_nodes[num_active_nodes++] = node; 
+      if (debug){
       printf_P(PSTR("%lu: APP Added 0%o to list of active nodes.\n\r"),millis(),node);
   }
+}
 }

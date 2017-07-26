@@ -74,8 +74,8 @@ RF24Network network(radio);
 uint16_t this_node;                           // Our node address
 const unsigned long interval = 20; // ms       // Delay manager to send pings regularly.
 unsigned long last_time_sent;
-
-
+const bool debug = false;
+//const bool debug = true;
 const short max_active_nodes = 10;            // Array of nodes we are aware of
 uint16_t active_nodes[max_active_nodes];
 short num_active_nodes = 0;
@@ -163,8 +163,10 @@ void setup(){
   //Serial.println(F("and control servos if attached (Check 'hasHardware' variable"));
   //printf_begin(); // Needed for "printDetails" Takes up some memory
  // Serial.begin(9600);
+  
   printf_begin();
   printf_P(PSTR("\n\rRF24Network/examples/meshping/\n\r"));
+  
 
   this_node = node_address_set[NODE_ADDRESS];            // Which node are we?
   
@@ -225,8 +227,10 @@ void loop(){
    }   
       ok = send_A(to);
   if (ok){
+    if (debug){
     printf_P(PSTR("%lu: APP Send_A ok\n\r"),millis());
     printf_P(PSTR("%lu: APP Send_A failed\n\r"),millis());
+    }
     last_time_sent -=100;
   }
     
@@ -234,10 +238,14 @@ else{                                                // Base node sends the curr
       ok = send_N(to);
    }
     
-    if (ok){                                              // Notify us of the result
+    if (ok){  // Notify us of the result
+        if (debug){
         printf_P(PSTR("%lu: APP Send ok\n\r"),millis());
+        }
     }else{
+        if (debug){
         printf_P(PSTR("%lu: APP Send failed\n\r"),millis());
+        }
         last_time_sent -= 100;                            // Try sending at a different time next time
     }
   }
@@ -258,8 +266,10 @@ bool send_T(uint16_t to)
   
   // The 'T' message that we send is just a ulong, containing the time
   unsigned long message = millis();
+  if (debug){
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending %lu to 0%o...\n\r"),millis(),message,to);
+  }
   return network.write(header,&message,sizeof(unsigned long));
 }
 
@@ -269,9 +279,10 @@ bool send_T(uint16_t to)
 bool send_N(uint16_t to)
 {
   RF24NetworkHeader header(/*to node*/ to, /*type*/ 'N' /*Time*/);
-  
+ if (debug){ 
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+ }
   return network.write(header,active_nodes,sizeof(active_nodes));
   
 }
@@ -281,9 +292,10 @@ bool send_N(uint16_t to)
 bool send_A(uint16_t to)
 {
   RF24NetworkHeader header(/*to node*/ to, /*type*/ 'A' /*Time*/);
-  
+  if (debug){
   printf_P(PSTR("---------------------------------\n\r"));
   printf_P(PSTR("%lu: APP Sending active nodes to 0%o...\n\r"),millis(),to);
+  }
   int x = myData.Xposition;
   int y = myData.Yposition;
   bool sw = myData.switchOn;
@@ -305,8 +317,9 @@ void handle_T(RF24NetworkHeader& header){
 
   unsigned long message;                                                                      // The 'T' message is just a ulong, containing the time
   network.read(header,&message,sizeof(unsigned long));
+  if (debug){
   printf_P(PSTR("%lu: APP Received %lu from 0%o\n\r"),millis(),message,header.from_node);
-
+  }
 
   if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
     add_node(header.from_node);
@@ -319,16 +332,20 @@ void handle_J(RF24NetworkHeader& header){
   unsigned long message;              // The 'T' message is just a ulong, containing the time
   msg_J msg;
   network.read(header,&msg,sizeof(msg));
+  if (debug){
   printf_P(PSTR("%lu: APP J Message Received %lu from 0%o\n\r"),millis(),msg,header.from_node);
+  }
   //Serial.println(".........................header.from_node: ");
 
 myData.Xposition = msg.x;
 myData.Yposition = msg.y;
 myData.switchOn = msg.sw;
+if (debug){
   Serial.print("X joystick from SC: ");
   Serial.print(myData.Xposition);
   Serial.print("   Y joystick from SC: ");
   Serial.println(myData.Yposition);
+}
     //aquire the analog input for Y  and rescale the 0..1023 range to -255..255 range
   analogTmp = myData.Yposition;
   throttle = (512 - analogTmp) / 2;
@@ -452,8 +469,9 @@ void handle_N(RF24NetworkHeader& header)
   static uint16_t incoming_nodes[max_active_nodes];
 
   network.read(header,&incoming_nodes,sizeof(incoming_nodes));
+  if (debug){
   printf_P(PSTR("%lu: APP Received nodes from 0%o\n\r"),millis(),header.from_node);
-
+  }
   int i = 0;
   while ( i < max_active_nodes && incoming_nodes[i] > 00 )
     add_node(incoming_nodes[i++]);
@@ -472,7 +490,9 @@ void add_node(uint16_t node){
   
   if ( i == -1 && num_active_nodes < max_active_nodes ){         // If not, add it to the table
       active_nodes[num_active_nodes++] = node; 
+      if (debug){
       printf_P(PSTR("%lu: APP Added 0%o to list of active nodes.\n\r"),millis(),node);
+      }
   }
 }
 
