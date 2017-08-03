@@ -79,8 +79,8 @@ int HorizontalServoPosition;    // variable to store the servo position
 
 int VerticalJoystickReceived;   // Variable to store received Joystick values
 int VerticalServoPosition;      // variable to store the servo positio
-const bool debug = false;
-//const bool debug = true;
+//const bool debug = false;
+const bool debug = true;
 /**
   Create a data structure for transmitting and receiving data
   This allows many variables to be easily sent and received in a single transmission
@@ -115,7 +115,7 @@ float rightMotorScale = 0;
 
 float maxMotorScale = 0; //holds the mixed output scaling factor
 
-int deadZone = 60; //jostick dead zone
+int deadZone = 160; //jostick dead zone
 
 struct msg_A {          // seting up mesage to send cordinents to the flight leader
   int x;

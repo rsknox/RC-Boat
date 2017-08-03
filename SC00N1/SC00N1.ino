@@ -63,17 +63,35 @@ const uint16_t node_address_set[6] = { 00, 01, 011, 021, 031, 041};
 // 8,9 (035,045) = Children of (05)
 
 uint8_t NODE_ADDRESS = 0;  // Use numbers 0 through to select an address from the array
-
-/***********************************************************************/
-/***********************************************************************/
-
-
 RF24 radio(7,8);                              // CE & CS pins to use (Using 7,8 on Uno,Nano)
 RF24Network network(radio); 
+/***********************************************************************/
+/***********************************************************************/
+//****************define the min, max and center you want for your joystick here*******//
+long range_X_min = 1000;           //lowest X value
+long range_X_max = 10000;          //highest X value
+long range_X_center = 0;           //X center calue
+unsigned long deadZone_X = 1;      //deadzone X, return center value for center +- deadzone(in steps of 1/1024)
+
+float range_Y_min = 0;             //lowest Y value
+float range_Y_max = 1023;          //highest Y value
+float range_Y_center = 512;        //Y center value
+unsigned long deadZone_Y = 1;      //deadzone Y, return center value for center +- deadzone(in steps of 1/1024)
+//================================================================================================/
+int val_X, val_Y;
+
+unsigned long X_CENTER, X_MIN, X_MAX;
+unsigned long Y_CENTER, Y_MIN, Y_MAX;
+
+unsigned long cal_X;
+unsigned long cal_Y;
+//=============================================================================================================\\
+//RF24 radio(7,8);                              // CE & CS pins to use (Using 7,8 on Uno,Nano)
+//RF24Network network(radio); 
 
 uint16_t this_node;                           // Our node address
-const bool debug = false;
-//const bool debug = true;
+const bool debug = false;    //------------------------------ DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
+//const bool debug = true;      //------------------------------ DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG DEBUG
 const unsigned long interval = 20; // ms       // Delay manager to send pings regularly.
 unsigned long last_time_sent;
 #define JOYSTICK_X   A0  // The Joystick potentiometers connected to Arduino Analog inputs
@@ -116,33 +134,42 @@ void setup(){
   // NOTE: The "F" in the print statements means "unchangable data; save in Flash Memory to conserve SRAM"
   //Serial.println(F("YourDuino.com Example: Send joystick data by nRF24L01 radio to another Arduino"));
   //printf_begin(); // Needed for "printDetails" Takes up some memory
-  pinMode(JOYSTICK_SW, INPUT_PULLUP);  // Pin A2 will be used as a digital input
+//  pinMode(JOYSTICK_SW, INPUT_PULLUP);  // Pin A2 will be used as a digital input
 
   Serial.begin(9600);
   printf_begin();
   printf_P(PSTR("\n\rRF24Network/examples/meshping/\n\r"));
 
-  this_node = node_address_set[NODE_ADDRESS];            // Which node are we?
-  
-  SPI.begin();                                           // Bring up the RF network
+  this_node = node_address_set[NODE_ADDRESS];  // Which node are we?
+
+  SPI.begin();    // Bring up the RF network
   radio.begin();
   radio.setPALevel(RF24_PA_HIGH);
-  network.begin(/*channel*/ 110, /*node address*/ this_node );
-
+  network.begin(/*channel*/110, /*node address*/ this_node);
+  
+  
+  pinMode(JOYSTICK_X, INPUT);
+  pinMode(JOYSTICK_Y, INPUT);
+  pinMode(JOYSTICK_SW, INPUT_PULLUP);
+  calibrate();
 }
-
 void loop(){
+ //Serial.println("Top of void loop");
         /*********************( Read the Joystick positions )*************************/
     myData.Xposition = analogRead(JOYSTICK_X);
+    //Serial.println("Following joystick_X read");
     myData.Yposition = analogRead(JOYSTICK_Y);
+    //Serial.println("Following joystick_Y read");
     myData.switchOn  = !digitalRead(JOYSTICK_SW);  // Invert the pulldown switch
+    //Serial.println("Following joystick_SW read");
 
   myData._micros = micros();  // Send back for timing
+//Serial.println("Following myData._micros call");
 
   network.update();                                      // Pump the network regularly
-
+//Serial.println("Following network update");
    while ( network.available() )  {                      // Is there anything ready for us?
-     
+     //Serial.println("Top network.available loop");
     RF24NetworkHeader header;                            // If so, take a look at it
     network.peek(header);
     //Serial.print(" header type ");
@@ -157,7 +184,7 @@ void loop(){
       }
     }
 
-  
+ 
   unsigned long now = millis();                         // Send a ping to the next node every 'interval' ms
   if ( now - last_time_sent >= interval ){
     last_time_sent = now;
@@ -215,6 +242,87 @@ void loop(){
 //  }
 }
 }
+void set_range_X(float min, float max, float center) {
+  range_X_min = min;
+  range_X_max = max;
+  range_X_center = center;
+}
+void set_range_Y(float min, float max, float center) {
+  range_Y_min = min;
+  range_Y_max = max;
+  range_Y_center = center;
+}
+void calibrate() {
+  Serial.println("\n---calibrating joystick---\n");
+  Serial.println("place the joystick in the center position");
+  cal_X = 0;
+  cal_Y = 0;
+  delay(2500);
+  Serial.print("calibrating center");
+  for (int i = 0; i < 100; i++) {
+    Serial.print(".");
+    cal_X += analogRead(JOYSTICK_X);
+    delay(5);
+    cal_Y += analogRead(JOYSTICK_Y);
+    delay(5);
+  }
+  X_CENTER = (cal_X/100);
+  Y_CENTER = (cal_Y/100);
+  Serial.print("\nCorrection X: ");Serial.print(X_CENTER);
+  Serial.print("\nCorrection Y: ");Serial.println(Y_CENTER);
+  
+  Serial.println("\nplace the joystick in the lower-right corner");
+  X_MIN = 0;    //reset the values
+  Y_MIN = 0;
+  delay(2500);
+  Serial.print("calibrating position");
+   for (int i = 0; i < 100; i++) {    //take 100 readings
+    Serial.print(".");
+    X_MIN += analogRead(JOYSTICK_X);
+    delay(5);
+    Y_MIN += analogRead(JOYSTICK_Y);
+    delay(5);
+  }
+  X_MIN /= 100;
+  Y_MIN /= 100;
+  Serial.println();
+  Serial.print("X: "); Serial.println(X_MIN);
+  Serial.print("Y: "); Serial.println(Y_MIN);
+
+Serial.println("\nplace the joystick in the upper-left corner");
+  X_MAX = 0;    //reset the values
+  Y_MAX = 0;
+  delay(2500);
+  Serial.print("calibrating position");
+   for (int i = 0; i < 100; i++) {    //take 100 readings
+    Serial.print(".");
+    X_MAX += analogRead(JOYSTICK_X);
+    delay(5);
+    Y_MAX += analogRead(JOYSTICK_Y);
+    delay(5);
+  }
+  X_MAX /=  100;
+  Y_MAX /=  100;
+  Serial.println();
+  Serial.print("X: "); Serial.println(X_MAX);
+  Serial.print("Y: "); Serial.println(Y_MAX);
+
+  if(X_MAX < X_MIN){
+    unsigned long val = X_MAX;
+    X_MAX = X_MIN;
+    X_MIN = val;
+  }
+  if(Y_MAX < Y_MIN){
+    unsigned long val = Y_MAX;
+    Y_MAX = Y_MIN;
+    Y_MIN = val;
+  }
+
+  Serial.print("\nrange X: ");Serial.print(X_MIN);Serial.print(" - ");Serial.println(X_MAX);
+  Serial.print("range Y: ");Serial.print(Y_MIN);Serial.print(" - ");Serial.println(Y_MAX);
+    
+  Serial.println("\n---calibration done---\n");
+}
 /**
  * Send a 'T' message, the current time
  */
@@ -264,31 +372,23 @@ bool send_J(uint16_t to)
   Serial.print("  y= ");
   Serial.println(y);
   }
- // caculation to restrict y to forward motion only an x to + or - 45 degrees 
- if (y < 558) {             //y = 558 is the null posion on our joy stick
-  y = 558;              // if the y is less than 558 we restrict to 558 so we dont go backwards
- }
- if (x == 550){
-  x = 551;      //making sure x dont = 550 so theres no / 0
- }
-//  float tan = ((y - 558) / (x - 550));
-//  Serial.print("Tan of joystick coords: ");
-//  Serial.print(tan);
-//  double angle = atan(tan);
-//  Serial.print("   Angle of joystick coords: ");
-//  Serial.println(angle);
-//  if(abs(tan) < 1.0){  //if tan is less than 1.0, that means the turn angle is greater than 45 degrees
-////  angle = 1.57 - angle;      //we are subtracting the angle pi over 2 to determin the angle ffrom strait a head  
-////  if (angle > .785) {      // if the angle > than pi/4 make x = to y to put it at 45 dregrees
-//  if (tan < 0.00){   // if it's negative, make negative x equal to y to ensure 45 degrees
-//    x = -y;
-//  }
-// else{
-//  x = y;
-//  }
-//  }  // if it falls through, let x,y equal the input joystick coords
-//  Serial.print(" angle: ");
-//  Serial.println(angle);
+if(x <=X_CENTER){
+  x = map(x,X_MIN,X_CENTER,0,512);
+  x = constrain(x,0,512);
+}
+else{
+  x = map(x,X_CENTER,X_MAX,512,1023);
+  x = constrain(x,512,1023);
+}
+  if(y <=Y_CENTER){
+  y = map(y,Y_MIN,Y_CENTER,0,512);
+  y = constrain(y,0,512);
+}
+else{
+  y = map(y,Y_CENTER,Y_MAX,512,1023);
+  
+  y = constrain(y,512,1023);
+}
   msg_J msg = {x, y, sw};
   if (debug){
   Serial.print("outgoing msg : x: ");
@@ -296,7 +396,7 @@ bool send_J(uint16_t to)
   Serial.print(" y ");
   Serial.print(y);
   Serial.print(" sw ");
-  Serial.print(sw);
+  Serial.println(sw);
   }
   return network.write(header, &msg, sizeof (msg));
 }
@@ -352,5 +452,8 @@ void add_node(uint16_t node){
       }
   }
 }
-
+float mapfloat(float x, float in_min, float in_max, float out_min, float out_max)
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
+}
 
