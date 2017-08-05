@@ -370,13 +370,28 @@ void handle_J(RF24NetworkHeader& header) {
   }
 
   //++++++++  Routine to restrict movement to forward direction only   +++++++++++++++++
+  float gov = 0.5;    // governor factor to slow down the velocity of the robot
 
   // Calculate the amount of forward movement from y joystick coordinate
   int delta_y = myData.Yposition - 512;
+  if (debug){
+    Serial.print("delta_y: ");
+    Serial.println(delta_y);
+  }
   if (delta_y > deadZone) { // Proceed only if y coord indicates forward motion desired
-    float vel = (delta_y / 512) * 255;  // calc PWM value for forward velocity
+    float vel = gov * (delta_y / 512.0) * 255.0;  // calc PWM value for forward velocity
+    if (debug){
+    Serial.print("vel: ");
+    Serial.println(vel);
+  }
     int lvel = vel * lcalfac;   // apply wheel motor calibration factors
     int rvel = vel * rcalfac;
+    if (debug) {
+    Serial.print("lvel: ");
+    Serial.print(lvel);
+    Serial.print("  rvel: ");
+    Serial.println(rvel);
+  }
 
     int x_sign = +1;   //initialize sign of delta_x to positive
     int delta_x = myData.Xposition - 512;
@@ -384,7 +399,12 @@ void handle_J(RF24NetworkHeader& header) {
     if (delta_x < 0) {
       x_sign = -1;  // if less than 0 set sign to negative
     }
-    
+    if (debug){
+    Serial.print("delta_x: ");
+    Serial.print(delta_x);
+    Serial.print("   x_sign: ");
+    Serial.println(x_sign);
+  }
     int a_delta_x = abs(delta_x);
     
     if (a_delta_x > delta_y) {
@@ -393,21 +413,31 @@ void handle_J(RF24NetworkHeader& header) {
       delta_x = x_sign * delta_y; //set delta x to to delta y with appropriate sign
     }
     
-    if (a_delta_x > turnrad) { //if the requested turn is too sharp, constrain to empirically determined value
-      delta_x = x_sign * turnrad;
-    }
+//    if (a_delta_x > turnrad) { //if the requested turn is too sharp, constrain to empirically determined value
+//      delta_x = x_sign * turnrad;
+//    }
     
     if (x_sign < 0) { //if x coord less than 512, then turn to the right is requested
-      rvel = rvel - (a_delta_x / 2);   // sub half from right wheel to slow down
-      lvel = lvel + (a_delta_x / 2);   // add half to left wheel to speed up
+      rvel = rvel - gov *(a_delta_x / 12);   // sub half from right wheel to slow down
+      lvel = lvel + gov *(a_delta_x / 12);   // add half to left wheel to speed up
     }
     else {
-      lvel = lvel - (a_delta_x / 2);  // otherwise adjust wheel velocities for left hand turn
-      rvel = rvel + (a_delta_x / 2);
+      lvel = lvel - gov *(a_delta_x / 12);  // otherwise adjust wheel velocities for left hand turn
+      rvel = rvel + gov *(a_delta_x / 12);
     }
+     if (debug){
+    Serial.print("lvel to wheel: ");
+    Serial.print(lvel);
+    Serial.print("   rvel to wheel: ");
+    Serial.println(rvel);
+  }
     
-    analogWrite(controllerFA, lvel); //apply the velocity PWM values to the motors
-    analogWrite(controllerFB, rvel);
+    analogWrite(controllerRA, lvel); //apply the velocity PWM values to the motors
+    analogWrite(controllerRB, rvel);
+  }
+  else{
+    analogWrite(controllerRA, 0);   // if in deadzone, turn motors off
+    analogWrite(controllerRB, 0); 
   }
 
   /*
