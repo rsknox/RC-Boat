@@ -1,5 +1,6 @@
 // flight leader Nano 1
 // 3 Aug 2017: mod to restrict movement to forward motion only
+// 5 Aug 2017: mod to use heading angle for motor differential calcs
 /*
   Copyright (C) 2011 James Coliz, Jr. <maniacbug@ymail.com>
 
@@ -47,6 +48,7 @@
 #include <RF24Network.h>
 #include <RF24.h>
 #include <SPI.h>
+#include <math.h>
 #include "printf.h"
 
 /***********************************************************************
@@ -124,6 +126,8 @@ const bool debug = false;
 float lcalfac = .968;
 float rcalfac = 1.0;
 int turnrad = 100;    // need to experiment to determine what minumum turn radius is appropriate
+float heading = 0.0;   // initialized heading to zero (straight ahead)
+float maxturn_angle = .7854;    // pi/4 radians
 
 int analogTmp = 0; //temporary variable to store
 int throttle, direction = 0; //throttle (Y axis) and direction (X axis)
@@ -351,7 +355,7 @@ void handle_T(RF24NetworkHeader& header) {
 */
 void handle_J(RF24NetworkHeader& header) {
 
-  unsigned long message;             
+  unsigned long message;
   msg_J msg;
   network.read(header, &msg, sizeof(msg));
   if (debug) {
@@ -370,191 +374,251 @@ void handle_J(RF24NetworkHeader& header) {
   }
 
   //++++++++  Routine to restrict movement to forward direction only   +++++++++++++++++
-  float gov = 0.5;    // governor factor to slow down the velocity of the robot
+  float gov = 0.75;    // governor factor to slow down the velocity of the robot
 
   // Calculate the amount of forward movement from y joystick coordinate
-  int delta_y = myData.Yposition - 512;
-  if (debug){
+  int delta_y = constrain((myData.Yposition - 512), 0, 512);
+
+  if (debug) {
     Serial.print("delta_y: ");
     Serial.println(delta_y);
   }
-  if (delta_y > deadZone) { // Proceed only if y coord indicates forward motion desired
-    float vel = gov * (delta_y / 512.0) * 255.0;  // calc PWM value for forward velocity
-    if (debug){
-    Serial.print("vel: ");
-    Serial.println(vel);
+  if (delta_y < deadZone) {   //if y in deadzone, turn motors off
+
+    if (debug) {
+      Serial.println("BBB deadZone");
+    }
+    analogWrite(controllerRA, 0);   // if in deadzone, turn motors off
+    analogWrite(controllerRB, 0);
   }
+  else {  // Proceed only if y coord indicates forward motion desired
+    float vel = constrain((gov * (delta_y / 512.0) * 255.0), 0, 512);  // calc PWM value for forward velocity
+    if (debug) {
+      Serial.print("vel: ");
+      Serial.println(vel);
+    }
     int lvel = vel * lcalfac;   // apply wheel motor calibration factors
     int rvel = vel * rcalfac;
     if (debug) {
-    Serial.print("lvel: ");
-    Serial.print(lvel);
-    Serial.print("  rvel: ");
-    Serial.println(rvel);
-  }
-
-    int x_sign = +1;   //initialize sign of delta_x to positive
-    int delta_x = myData.Xposition - 512;
-    
-    if (delta_x < 0) {
-      x_sign = -1;  // if less than 0 set sign to negative
+      Serial.print("lvel: ");
+      Serial.print(lvel);
+      Serial.print("  rvel: ");
+      Serial.println(rvel);
     }
-    if (debug){
-    Serial.print("delta_x: ");
-    Serial.print(delta_x);
-    Serial.print("   x_sign: ");
-    Serial.println(x_sign);
-  }
-    int a_delta_x = abs(delta_x);
-    
-    if (a_delta_x > delta_y) {
-      /*if delta x is greater than y, constrain to the y value so the
-        turn is never more that 45 degrees */
-      delta_x = x_sign * delta_y; //set delta x to to delta y with appropriate sign
-    }
-    
-//    if (a_delta_x > turnrad) { //if the requested turn is too sharp, constrain to empirically determined value
-//      delta_x = x_sign * turnrad;
-//    }
-    
-    if (x_sign < 0) { //if x coord less than 512, then turn to the right is requested
-      rvel = rvel - gov *(a_delta_x / 12);   // sub half from right wheel to slow down
-      lvel = lvel + gov *(a_delta_x / 12);   // add half to left wheel to speed up
-    }
-    else {
-      lvel = lvel - gov *(a_delta_x / 12);  // otherwise adjust wheel velocities for left hand turn
-      rvel = rvel + gov *(a_delta_x / 12);
-    }
-     if (debug){
-    Serial.print("lvel to wheel: ");
-    Serial.print(lvel);
-    Serial.print("   rvel to wheel: ");
-    Serial.println(rvel);
-  }
-    
-    analogWrite(controllerRA, lvel); //apply the velocity PWM values to the motors
-    analogWrite(controllerRB, rvel);
-  }
-  else{
-    analogWrite(controllerRA, 0);   // if in deadzone, turn motors off
-    analogWrite(controllerRB, 0); 
-  }
-
-  /*
-      //aquire the analog input for Y  and rescale the 0..1023 range to -255..255 range
-    analogTmp = myData.Yposition;
-    throttle = (512 - analogTmp) / 2;
-
-    delayMicroseconds(100);
-    //...and  the same for X axis
-    analogTmp = myData.Xposition;
-    direction = -(512 - analogTmp) / 2;
-
-    //mix throttle and direction
-    leftMotor = throttle + direction;
-    rightMotor = throttle - direction;
-
-    //print the initial mix results
-    //Serial.print("LIN:"); //Serial.print( leftMotor, DEC);
-    //Serial.print(", RIN:"); //Serial.print( rightMotor, DEC);
-
-    //calculate the scale of the results in comparision base 8 bit PWM resolution
-    leftMotorScale =  leftMotor / 255.0;
-    leftMotorScale = abs(leftMotorScale);
-    rightMotorScale =  rightMotor / 255.0;
-    rightMotorScale = abs(rightMotorScale);
-
-    //Serial.print("| LSCALE:"); //Serial.print( leftMotorScale, 2);
-    //Serial.print(", RSCALE:"); //Serial.print( rightMotorScale, 2);
-
-    //choose the max scale value if it is above 1
-    maxMotorScale = max(leftMotorScale, rightMotorScale);
-    maxMotorScale = max(1, maxMotorScale);
-
-    //and apply it to the mixed values
-    leftMotorScaled = constrain(leftMotor / maxMotorScale, -255, 255);
-    rightMotorScaled = constrain(rightMotor / maxMotorScale, -255, 255);
-    //Serial.println();
-    //Serial.print("| LOUT:"); //Serial.print( leftMotorScaled);
-    //Serial.print(", ROUT:"); //Serial.print( rightMotorScaled);
-
-    //Serial.print(" |");
-
-    //apply the results to appropriate uC PWM outputs for the LEFT motor:
-    if (abs(leftMotorScaled) > deadZone)
-    {
-
-      if (leftMotorScaled > 0)
-      {
-        //Serial.print("F");
-        //Serial.print(abs(leftMotorScaled), DEC);
-
-        analogWrite(controllerRA, 0);
-        analogWrite(controllerFA, abs(leftMotorScaled));
-      }
-      else
-      {
-        //Serial.print("R");
-        //Serial.print(abs(leftMotorScaled), DEC);
-
-        analogWrite(controllerFA, 0);
-        analogWrite(controllerRA, abs(leftMotorScaled));
-      }
-    }
-    else
-    {
-      //Serial.print("IDLE");
-      analogWrite(controllerFA, 0);
-      analogWrite(controllerRA, 0);
-    }
-
-    //apply the results to appropriate uC PWM outputs for the RIGHT motor:
-    if (abs(rightMotorScaled) > deadZone)
-    {
-
-      if (rightMotorScaled > 0)
-      {
-        //Serial.print("F");
-        //Serial.print(abs(rightMotorScaled), DEC);
-
-        analogWrite(controllerRB, 0);
-        analogWrite(controllerFB, abs(rightMotorScaled));
-      }
-      else
-      {
-        //Serial.print("R");
-        //Serial.print(abs(rightMotorScaled), DEC);
-
-        analogWrite(controllerFB, 0);
-        analogWrite(controllerRB, abs(rightMotorScaled));
-      }
-    }
-    else
-    {
-      //Serial.print("IDLE");
+    if (abs(myData.Xposition - 512) < deadZone) { //if x in deadZone, drive both motors to move straight ahead
+      analogWrite(controllerRA, lvel); //apply the velocity PWM values to the motors
+      analogWrite(controllerRB, rvel);
+      analogWrite(controllerFA, 0); //apply the velocity PWM values to the motors
       analogWrite(controllerFB, 0);
-      analogWrite(controllerRB, 0);
     }
+    else {    //otherwise calculate the steering differential
+      
+      int x_sign = +1;   //initialize sign of delta_x to positive
+      int delta_x = myData.Xposition - 512;
 
-    //Serial.println("");
+      if (delta_x < 0) {
+        x_sign = -1;  // if less than 0 set sign to negative
+      }
+      if (debug) {
+        Serial.print("delta_x: ");
+        Serial.print(delta_x);
+        Serial.print("   x_sign: ");
+        Serial.println(x_sign);
+      }
+      // calculate the heading indicated by the JS coordinates
 
-    //To do: throttle change limiting, to avoid radical changes of direction for large DC motors
+      int a_delta_x = abs(delta_x);
+        float dy = delta_y;
+        float dx = a_delta_x;
+        float angle = atan(dy / dx);
+        if (debug) {
+          Serial.print("angle: ");
+          Serial.println(angle);
+        }
+        float theta = 1.5708 - atan(delta_y / a_delta_x);  // compute heading angle
+        if (debug) {
+          Serial.print("theta: ");
+          Serial.println(theta);
+        }
+        if (theta > maxturn_angle) {
+          theta = maxturn_angle;
+        }
+        // how many 'PWM ticks' per degree of heading??
+        if (x_sign < 0) { //if x coord less than 512, then turn to the right is requested
+          rvel = rvel - (theta * 100);  // sub half from right wheel to slow down
+          lvel = lvel + (theta * 100);  // add half to left wheel to speed up
+          rvel = constrain(rvel, 0, gov * 255);
+          lvel = constrain(lvel, 0, gov * 255);
+          if (debug) {
+            Serial.print("Right Turn--lvel to wheel: ");
+            Serial.print(lvel);
+            Serial.print("   rvel to wheel: ");
+            Serial.println(rvel);
+          }
+          analogWrite(controllerRA, lvel); //apply the velocity PWM values to the motors
+          analogWrite(controllerRB, rvel);
+          analogWrite(controllerFA, 0); //apply the velocity PWM values to the motors
+          analogWrite(controllerFB, 0);
 
-    // delay(50);
+
+        }
+        else {
+          lvel = lvel - (theta * 100); // otherwise adjust wheel velocities for left hand turn
+          rvel = rvel + (theta * 100);
+          rvel = constrain(rvel, 0, gov * 255);
+          lvel = constrain(lvel, 0, gov * 255);
+          if (debug) {
+            Serial.print("Left Turn--lvel to wheel: ");
+            Serial.print(lvel);
+            Serial.print("   rvel to wheel: ");
+            Serial.println(rvel);
+          }
+
+          analogWrite(controllerRA, lvel); //apply the velocity PWM values to the motors
+          analogWrite(controllerRB, rvel);
+          analogWrite(controllerFA, 0); //apply the velocity PWM values to the motors
+          analogWrite(controllerFB, 0);
+        }
+    }
+  }
 
 
-    //Serial.println(header.from_node);
-    //Serial.print(" x ");
-    //Serial.print(msg.x);
-    //Serial.print("  y ");
-    //Serial.print(msg.y);
-    //Serial.print("  sw ");
-    //Serial.println(msg.sw);
+    /*
+       if (a_delta_x > delta_y) {
+         //if delta x is greater than y, constrain to the y value so the
+         // turn is never more that 45 degrees
+         delta_x = x_sign * delta_y; //set delta x to to delta y with appropriate sign
+       }
+
+      //    if (a_delta_x > turnrad) { //if the requested turn is too sharp, constrain to empirically determined value
+      //      delta_x = x_sign * turnrad;
+      //    }
+
+       if (x_sign < 0) { //if x coord less than 512, then turn to the right is requested
+         rvel = rvel - gov *(a_delta_x / 12);   // sub half from right wheel to slow down
+         lvel = lvel + gov *(a_delta_x / 12);   // add half to left wheel to speed up
+       }
+       else {
+         lvel = lvel - gov *(a_delta_x / 12);  // otherwise adjust wheel velocities for left hand turn
+         rvel = rvel + gov *(a_delta_x / 12);
+       }
+    */
+
+/*
+    //aquire the analog input for Y  and rescale the 0..1023 range to -255..255 range
+  analogTmp = myData.Yposition;
+  throttle = (512 - analogTmp) / 2;
+
+  delayMicroseconds(100);
+  //...and  the same for X axis
+  analogTmp = myData.Xposition;
+  direction = -(512 - analogTmp) / 2;
+
+  //mix throttle and direction
+  leftMotor = throttle + direction;
+  rightMotor = throttle - direction;
+
+  //print the initial mix results
+  //Serial.print("LIN:"); //Serial.print( leftMotor, DEC);
+  //Serial.print(", RIN:"); //Serial.print( rightMotor, DEC);
+
+  //calculate the scale of the results in comparision base 8 bit PWM resolution
+  leftMotorScale =  leftMotor / 255.0;
+  leftMotorScale = abs(leftMotorScale);
+  rightMotorScale =  rightMotor / 255.0;
+  rightMotorScale = abs(rightMotorScale);
+
+  //Serial.print("| LSCALE:"); //Serial.print( leftMotorScale, 2);
+  //Serial.print(", RSCALE:"); //Serial.print( rightMotorScale, 2);
+
+  //choose the max scale value if it is above 1
+  maxMotorScale = max(leftMotorScale, rightMotorScale);
+  maxMotorScale = max(1, maxMotorScale);
+
+  //and apply it to the mixed values
+  leftMotorScaled = constrain(leftMotor / maxMotorScale, -255, 255);
+  rightMotorScaled = constrain(rightMotor / maxMotorScale, -255, 255);
+  //Serial.println();
+  //Serial.print("| LOUT:"); //Serial.print( leftMotorScaled);
+  //Serial.print(", ROUT:"); //Serial.print( rightMotorScaled);
+
+  //Serial.print(" |");
+
+  //apply the results to appropriate uC PWM outputs for the LEFT motor:
+  if (abs(leftMotorScaled) > deadZone)
+  {
+
+    if (leftMotorScaled > 0)
+    {
+      //Serial.print("F");
+      //Serial.print(abs(leftMotorScaled), DEC);
+
+      analogWrite(controllerRA, 0);
+      analogWrite(controllerFA, abs(leftMotorScaled));
+    }
+    else
+    {
+      //Serial.print("R");
+      //Serial.print(abs(leftMotorScaled), DEC);
+
+      analogWrite(controllerFA, 0);
+      analogWrite(controllerRA, abs(leftMotorScaled));
+    }
+  }
+  else
+  {
+    //Serial.print("IDLE");
+    analogWrite(controllerFA, 0);
+    analogWrite(controllerRA, 0);
+  }
+
+  //apply the results to appropriate uC PWM outputs for the RIGHT motor:
+  if (abs(rightMotorScaled) > deadZone)
+  {
+
+    if (rightMotorScaled > 0)
+    {
+      //Serial.print("F");
+      //Serial.print(abs(rightMotorScaled), DEC);
+
+      analogWrite(controllerRB, 0);
+      analogWrite(controllerFB, abs(rightMotorScaled));
+    }
+    else
+    {
+      //Serial.print("R");
+      //Serial.print(abs(rightMotorScaled), DEC);
+
+      analogWrite(controllerFB, 0);
+      analogWrite(controllerRB, abs(rightMotorScaled));
+    }
+  }
+  else
+  {
+    //Serial.print("IDLE");
+    analogWrite(controllerFB, 0);
+    analogWrite(controllerRB, 0);
+  }
+
+  //Serial.println("");
+
+  //To do: throttle change limiting, to avoid radical changes of direction for large DC motors
+
+  // delay(50);
 
 
-    //if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
-      //add_node(header.from_node);
-  */
+  //Serial.println(header.from_node);
+  //Serial.print(" x ");
+  //Serial.print(msg.x);
+  //Serial.print("  y ");
+  //Serial.print(msg.y);
+  //Serial.print("  sw ");
+  //Serial.println(msg.sw);
+
+
+  //if ( header.from_node != this_node || header.from_node > 00 )                                // If this message is from ourselves or the base, don't bother adding it to the active nodes.
+    //add_node(header.from_node);
+*/
 
 }/*end handle_J*/
 
@@ -593,7 +657,7 @@ void add_node(uint16_t node) {
 
   if ( i == -1 && num_active_nodes < max_active_nodes ) {        // If not, add it to the table
     active_nodes[num_active_nodes++] = node;
-    
+
     if (debug) {
       printf_P(PSTR("%lu: APP Added 0%o to list of active nodes.\n\r"), millis(), node);
     }
