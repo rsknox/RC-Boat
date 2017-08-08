@@ -120,8 +120,8 @@ const byte disablePin = 2; //OSMC disable, pull LOW to enable motor controller
 //+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+
 //     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW
 //+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+
-//const bool debug = false;
-const bool debug = true;
+const bool debug = false;
+//const bool debug = true;
 
 // Motor calibration factors determined empirically on 3 Aug 2017
 float lcalfac = .968;
@@ -392,7 +392,7 @@ void handle_J(RF24NetworkHeader& header) {
   }
 
   //++++++++  Routine to restrict movement to forward direction only   +++++++++++++++++
-  float gov = 0.75;    // governor factor to slow down the velocity of the robot
+  float gov = 1.0;    // governor factor to slow down the velocity of the robot
 
   // Calculate the amount of forward movement from y joystick coordinate
   int delta_y = constrain((myData.Yposition - 512), 0, 512);

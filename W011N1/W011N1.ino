@@ -79,8 +79,21 @@ int HorizontalServoPosition;    // variable to store the servo position
 
 int VerticalJoystickReceived;   // Variable to store received Joystick values
 int VerticalServoPosition;      // variable to store the servo positio
-//const bool debug = false;
-const bool debug = true;
+
+//+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+
+//     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW
+//+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+
+
+const bool debug = false;
+//const bool debug = true;
+
+// Motor calibration factors determined empirically on 3 Aug 2017
+float lcalfac = 1.0;
+float rcalfac = 1.0;
+int turnrad = 100;    // need to experiment to determine what minumum turn radius is appropriate
+float heading = 0.0;   // initialized heading to zero (straight ahead)
+float maxturn_angle = .7854;    // pi/4 radians
+
 /**
   Create a data structure for transmitting and receiving data
   This allows many variables to be easily sent and received in a single transmission
@@ -288,11 +301,22 @@ void handle_N(RF24NetworkHeader& header)
   while ( i < max_active_nodes && incoming_nodes[i] > 00 )
     add_node(incoming_nodes[i++]);
 }
-/**
-<<<<<<< HEAD
-=======
- * Handle a 'A' message
- */
+void motorsOff() {
+  if (debug) {
+    Serial.println("BBB deadZone");
+  }
+  analogWrite(controllerRA, 0);   // if in deadzone, turn motors off
+  analogWrite(controllerRB, 0);
+}
+
+int motorsOn(int lvel, int rvel) {
+  analogWrite(controllerRA, lvel); //apply the velocity PWM values to the motors
+  analogWrite(controllerRB, rvel);
+  analogWrite(controllerFA, 0); //apply the velocity PWM values to the motors
+  analogWrite(controllerFB, 0);
+}
+//================================================================================
+// Handle A
 void handle_A(RF24NetworkHeader& header){
 
   unsigned long message;              // The 'T' message is just a ulong, containing the time
@@ -312,7 +336,103 @@ if (debug){
    Serial.print("   Y joystick from SC: ");
    Serial.println(myData.Yposition);
 }
-    //aquire the analog input for Y  and rescale the 0..1023 range to -255..255 range
+  //++++++++  Routine to restrict movement to forward direction only   +++++++++++++++++
+  float gov = 1.0;    // governor factor to slow down the velocity of the robot
+
+  // Calculate the amount of forward movement from y joystick coordinate
+  int delta_y = constrain((myData.Yposition - 512), 0, 512);
+
+  if (debug) {
+    Serial.print("delta_y: ");
+    Serial.println(delta_y);
+  }
+  if (delta_y < deadZone) {   //if y in deadzone, turn motors off
+
+    motorsOff();
+  }
+  else {  // Proceed only if y coord indicates forward motion desired
+    float vel = constrain((gov * (delta_y / 512.0) * 255.0), 0, 512);  // calc PWM value for forward velocity
+    if (debug) {
+      Serial.print("vel: ");
+      Serial.println(vel);
+    }
+    int lvel = vel * lcalfac;   // apply wheel motor calibration factors
+    int rvel = vel * rcalfac;
+    if (debug) {
+      Serial.print("lvel: ");
+      Serial.print(lvel);
+      Serial.print("  rvel: ");
+      Serial.println(rvel);
+    }
+    if (abs(myData.Xposition - 512) < deadZone) { //if x in deadZone, drive both motors to move straight ahead
+
+      motorsOn(lvel, rvel);
+
+    }
+    else {    //otherwise calculate the steering differential
+
+      int x_sign = +1;   //initialize sign of delta_x to positive
+      int delta_x = myData.Xposition - 512;
+
+      if (delta_x < 0) {
+        x_sign = -1;  // if less than 0 set sign to negative
+      }
+      if (debug) {
+        Serial.print("delta_x: ");
+        Serial.print(delta_x);
+        Serial.print("   x_sign: ");
+        Serial.println(x_sign);
+      }
+      // calculate the heading indicated by the JS coordinates
+
+      int a_delta_x = abs(delta_x);
+      float dy = delta_y;
+      float dx = a_delta_x;
+      float angle = atan(dy / dx);
+      if (debug) {
+        Serial.print("angle: ");
+        Serial.println(angle);
+      }
+      float theta = 1.5708 - (angle);  // compute heading angle
+      if (debug) {
+        Serial.print("theta: ");
+        Serial.println(theta);
+      }
+      if (theta > maxturn_angle) {
+        theta = maxturn_angle;
+      }
+      // how many 'PWM ticks' per degree of heading??
+      if (x_sign < 0) { //if x coord less than 512, then turn to the right is requested
+        rvel = rvel - (theta * 100);  // sub half from right wheel to slow down
+        lvel = lvel + (theta * 100);  // add half to left wheel to speed up
+        rvel = constrain(rvel, 0, gov * 255);
+        lvel = constrain(lvel, 0, gov * 255);
+        if (debug) {
+          Serial.print("Right Turn--lvel to wheel: ");
+          Serial.print(lvel);
+          Serial.print("   rvel to wheel: ");
+          Serial.println(rvel);
+        }
+        motorsOn(lvel, rvel);
+
+      }
+      else {
+        lvel = lvel - (theta * 100); // otherwise adjust wheel velocities for left hand turn
+        rvel = rvel + (theta * 100);
+        rvel = constrain(rvel, 0, gov * 255);
+        lvel = constrain(lvel, 0, gov * 255);
+        if (debug) {
+          Serial.print("Left Turn--lvel to wheel: ");
+          Serial.print(lvel);
+          Serial.print("   rvel to wheel: ");
+          Serial.println(rvel);
+        }
+        motorsOn(lvel, rvel);
+      }
+    }
+  }
+
+    /*//aquire the analog input for Y  and rescale the 0..1023 range to -255..255 range
   analogTmp = myData.Yposition;
   throttle = (512 - analogTmp) / 2;
 
@@ -446,6 +566,7 @@ if (debug){
 >>>>>>> we got the network radio operationaland all 2 robots
  * Add a particular node to the current list of active nodes
  */
+} //end handle_A
 void add_node(uint16_t node){
   
   short i = num_active_nodes;                                    // Do we already know about this node?
