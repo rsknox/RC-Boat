@@ -55,7 +55,7 @@ const uint16_t node_address_set[6] = { 00, 01, 011, 021, 031, 041 };
 // 4,6 (015,025) = Children of (05)
 // 7   (032)     = Child of (02)
 // 8,9 (035,045) = Children of (05)
-uint8_t NODE_ADDRESS = 02;  // Set pointer to the radio address to Wingman 1
+uint8_t NODE_ADDRESS = 03;  // Set pointer to the radio address to Wingman 2
 /***********************************************************************/
 /***********************************************************************/
 RF24 radio(7, 8);                             // CE & CS pins to use (Using 7,8 on Uno,Nano)

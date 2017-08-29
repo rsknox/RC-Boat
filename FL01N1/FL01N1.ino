@@ -120,8 +120,8 @@ const byte disablePin = 2; //OSMC disable, pull LOW to enable motor controller
 //+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+
 //     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW     DEBUG SW
 //+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+*+
-const bool debug = false;
-//const bool debug = true;
+//const bool debug = false;
+const bool debug = true;
 
 // Motor calibration factors determined empirically on 3 Aug 2017
 float lcalfac = .968;
